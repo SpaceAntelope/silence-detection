@@ -5,14 +5,12 @@
     <RootNamespace>silence_detector</RootNamespace>
   </PropertyGroup>
   <ItemGroup>
+    <Compile Include="Model.fs" />
+    <Compile Include="AFR.fs" />
     <Compile Include="Program.fs" />
-  </ItemGroup>
+  </ItemGroup>  
   <ItemGroup>
-    <None Include="data\succession_s04e4.wav">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </None>
-  </ItemGroup>
-  <ItemGroup>
+    <PackageReference Include="commandlineparser.fsharp" Version="2.9.1" />
     <PackageReference Include="NAudio" Version="2.1.0" />
   </ItemGroup>
 </Project>
