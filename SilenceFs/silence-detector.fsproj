@@ -5,6 +5,7 @@
     <RootNamespace>silence_detector</RootNamespace>
   </PropertyGroup>
   <ItemGroup>
+    <Compile Include="Common.fs" />
     <Compile Include="Model.fs" />
     <Compile Include="AFR.fs" />
     <Compile Include="Program.fs" />

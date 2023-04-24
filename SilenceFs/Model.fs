@@ -22,6 +22,8 @@ module Model =
         MaxSilenceDuration: float
         // [<Option('n',"new-silence",Default=0.25, HelpText="Minimum silence duration in seconds")>]
         // NewSilenceDuration: float
+        [<Option("mark",HelpText = "Mark silences on sound graph")>]
+        MarkPath: string
     }
 
     type RangeData = { 

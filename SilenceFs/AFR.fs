@@ -4,6 +4,7 @@ module AFR =
     open System
     open NAudio.Wave
     open System.IO
+    open Common
 
     let Take (duration: TimeSpan) (reader: AudioFileReader) =
         WaveExtensionMethods.Take(reader, duration) :?> AudioFileReader
@@ -21,7 +22,7 @@ module AFR =
         let samplesToCompletion = stopDuration.TotalSeconds * (float samplesPerSecond)
 
         seq {
-            let mutable sampleCount =  1
+            let mutable sampleCount = reader.Length
             let mutable samplesProcessed = 0.0
             while sampleCount > 0 && samplesProcessed < samplesToCompletion do
                 sampleCount <- reader.Read(buffer, 0, buffer.Length)
@@ -30,17 +31,22 @@ module AFR =
         }
 
     let TakeSamples (f: single seq -> unit) (samplesToCompletion : int) (reader: AudioFileReader) =
+        // printf "%d %d " reader.WaveFormat.BlockAlign samplesToCompletion
         let samplesToCompletion = samplesToCompletion - (samplesToCompletion % reader.WaveFormat.BlockAlign) // round to block align
-        let samplesPerSecond = Math.Min(reader.WaveFormat.SampleRate * reader.WaveFormat.Channels, samplesToCompletion)
+
+        let samplesPerSecond = Math.Min(sps reader, samplesToCompletion)
+        
+        // printfn "%d %d" samplesToCompletion samplesPerSecond
+        
         let buffer  = Array.zeroCreate<single> (samplesPerSecond)       
         
         seq {
             let mutable sampleCount =  1
-            let mutable samplesProcessed = 0.0
+            let mutable samplesProcessed = 0
             while sampleCount > 0 && samplesProcessed < samplesToCompletion do
                 sampleCount <- reader.Read(buffer, 0, buffer.Length)
-                samplesProcessed <- samplesProcessed + float sampleCount
-                yield! buffer //|> Array.take sampleCount
+                samplesProcessed <- samplesProcessed + sampleCount
+                yield! (buffer |> Array.take sampleCount)
         } |> f
 
         reader
