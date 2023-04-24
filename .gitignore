@@ -479,3 +479,4 @@ $RECYCLE.BIN/
 data
 .vscode
 *.wav
+.config
