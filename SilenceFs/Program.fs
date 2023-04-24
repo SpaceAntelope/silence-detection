@@ -6,14 +6,51 @@ open System.IO
 open NAudio.Wave
 open CommandLine
 open Model
+open Newtonsoft.Json
 
 
 module Program = 
     let isNullorEmpty = String.IsNullOrEmpty
     let isNotNullorEmpty = isNullorEmpty>>not
 
+    let report (ranges: Range list ) (duration: TimeSpan) (originalDuration: TimeSpan) (opts: DetectOptions)=
+        
+        let maxSilenceSpan = TimeSpan.FromSeconds(opts.MaxSilenceDuration)
+        let silenceCount = 
+            ranges 
+            |> List.filter (
+                function 
+                | Silence x when x.Length >= maxSilenceSpan  -> true 
+                | _ -> false) 
+            |> List.length
+
+        let (silenceDuration, soundDuration) = 
+            ranges
+            |> List.fold (fun (silence,sound) current -> 
+                match current with
+                | Silence x -> (silence + x.Length, sound)
+                | Sound x -> (silence, sound + x.Length)
+            ) (TimeSpan.Zero, TimeSpan.Zero)
+        
+        {|
+            SilenceDuration = silenceDuration
+            SoundDuration = soundDuration
+            ExpectedInputDuration = silenceDuration + soundDuration
+            ActualInputDuration = originalDuration
+            ExpectedOutputDuration = soundDuration + float silenceCount * TimeSpan.FromSeconds(opts.MaxSilenceDuration)
+            ActualOutputDuration = duration
+            OutputFile = IO.Path.GetFullPath(opts.OutputFile)
+
+            Ranges = ranges |> List.map (
+                function 
+                | Silence x -> {| x with Case = "Silence" |} 
+                | Sound x -> {|x with Case = "Sound"|})
+        |} 
+        |> fun x -> JsonConvert.SerializeObject(x, Formatting.Indented)
+        |> printfn "%s"
+
     let DetectSilence (opts: DetectOptions) =  
-        printfn "%A" opts
+        //printfn "%A" opts
         let offset = TimeSpan.FromSeconds(opts.Offset)
         let duration = opts.Duration |> Option.map (fun dur -> TimeSpan.FromSeconds(dur))
 
@@ -23,7 +60,7 @@ module Program =
         let bin = TimeSpan.FromMilliseconds(opts.Sampling)
         let samplesPerBin = float samplesPerSecond * bin.TotalSeconds
         
-        printfn $"Samples/sec: {samplesPerSecond}"
+        // printfn $"Samples/sec: {samplesPerSecond}"
 
         let indexedBinnedSamples = 
             reader
@@ -63,9 +100,7 @@ module Program =
                     | true -> ()
                     | false -> ()
             } |> List.ofSeq
-
         
-        if opts.List then ranges |> List.iter (printfn "%A")
 
         if isNotNullorEmpty opts.OutputFile
         then            
@@ -95,10 +130,7 @@ module Program =
             ) reader ranges |> ignore            
             writer.Flush()
 
-            printfn $"Old duration: {ranges |> List.map (fun x-> match x with Silence y -> y.Length.TotalSeconds | Sound y -> y.Length.TotalSeconds) |> List.sum |> TimeSpan.FromSeconds}"
-            printfn $"New duration: {writer.TotalTime}"
-
-            printfn $"Output file written at {IO.Path.GetFullPath(opts.OutputFile)}"
+            if opts.List then report ranges writer.TotalTime reader.TotalTime opts                  
             
     [<EntryPoint>]
     let main argv =
