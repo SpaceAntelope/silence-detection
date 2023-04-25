@@ -70,10 +70,13 @@ module Program =
         let samplesPerSecond = sps reader
 
         let span2samples (span: TimeSpan) =
-            (span.TotalSeconds * float samplesPerSecond) |> int
+            (span.TotalSeconds *  float samplesPerSecond) |> int
 
-        let s1 = Array.create 10 0.35f
-        let s2 = Array.create 10 -0.35f
+        let span2bytes (span: TimeSpan) =            
+            (span.TotalSeconds * float reader.WaveFormat.AverageBytesPerSecond) |> int
+
+        let s1 = Array.create 10 0.35f |> Array.collect (BitConverter.GetBytes)
+        let s2 = Array.create 10 -0.35f |> Array.collect (BitConverter.GetBytes)
 
         reader.Position <- 0
         use writer = new WaveFileWriter(markedPath, reader.WaveFormat)
@@ -82,24 +85,24 @@ module Program =
         |> List.iter (fun range ->
             match range with
             | Silence silence ->
-                let count = silence.Length |> span2samples
+                let count = silence.Length |> span2bytes
 
                 reader
-                |> AFR.TakeSamples
+                |> AFR.TakeBytes
                     (fun buff ->
                         let samples = buff |> Array.ofSeq
                         let toWrite = [| s1; samples; s2 |] |> Array.concat
-                        writer.WriteSamples(toWrite, 0, toWrite.Length))             
+                        writer.Write(toWrite, 0, toWrite.Length))             
                     count
                 |> ignore
             | Sound sound ->
-                let count = sound.Length |> span2samples
+                let count = sound.Length |> span2bytes
 
                 reader
-                |> AFR.TakeSamples
+                |> AFR.TakeBytes
                     (fun buff ->
                         let samples = buff |> Array.ofSeq                
-                        writer.WriteSamples(samples, 0, samples.Length)
+                        writer.Write(samples, 0, samples.Length)
                     // writer.WriteSamples(shortLoudness, 0, shortLoudness.Length)
                     // writer.WriteSamples(samples, 0, samples.Length)
                     // writer.WriteSamples(shortLoudness, 0, shortLoudness.Length)

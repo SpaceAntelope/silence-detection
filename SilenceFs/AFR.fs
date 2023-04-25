@@ -51,6 +51,28 @@ module AFR =
 
         reader
 
+    let TakeBytes (f: byte seq -> unit) (samplesToCompletion: int) (reader: AudioFileReader) =
+        let b2s = int byte2singleConversionFactor
+        let bytesToCompletion = b2s * samplesToCompletion
+        let bytesToCompletion = samplesToCompletion - (samplesToCompletion % reader.WaveFormat.BlockAlign) // round to block align
+
+        let bytesPerSecond = Math.Min(sps reader * b2s, bytesToCompletion)
+        
+        // printfn "%d %d" samplesToCompletion samplesPerSecond
+        
+        let buffer  = Array.zeroCreate<byte> (bytesPerSecond)
+        
+        seq {
+            let mutable sampleCount =  1
+            let mutable samplesProcessed = 0
+            while sampleCount > 0 && samplesProcessed < samplesToCompletion do
+                sampleCount <- reader.Read(buffer, 0, buffer.Length)
+                samplesProcessed <- samplesProcessed + sampleCount
+                yield! (buffer |> Array.take sampleCount)
+        } |> f
+
+        reader
+
     let SkipSamples (sampleCount : int64) (reader: AudioFileReader) =
         let byte2singleFactor = int64 (sizeof<float32>/sizeof<byte>)
         printf $"Skip {reader.CurrentTime}"
