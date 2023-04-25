@@ -12,7 +12,7 @@ open Common
 
 module Program =
 
-    
+
 
     let overwriteSilences
         (reader: AudioFileReader)
@@ -31,11 +31,12 @@ module Program =
         let s2 = Array.create 10 -0.35f
 
         let shortSilence =
-            let emptyness = Array.create (int (maxSilenceDuration * float samplesPerSecond)) (0.0f)
-            if markSilences 
-            then
+            let emptyness =
+                Array.create (int (maxSilenceDuration * float samplesPerSecond)) (0.0f)
+
+            if markSilences then
                 [| s1; emptyness; s2 |] |> Array.concat
-            else 
+            else
                 emptyness
 
         reader.Position <- 0
@@ -75,9 +76,9 @@ module Program =
         let samplesPerSecond = sps reader
 
         let span2samples (span: TimeSpan) =
-            (span.TotalSeconds *  float samplesPerSecond) |> int
+            (span.TotalSeconds * float samplesPerSecond) |> int
 
-        let span2bytes (span: TimeSpan) =            
+        let span2bytes (span: TimeSpan) =
             (span.TotalSeconds * float reader.WaveFormat.AverageBytesPerSecond) |> int
 
         let s1 = Array.create 10 0.35f |> Array.collect (BitConverter.GetBytes)
@@ -97,7 +98,7 @@ module Program =
                     (fun buff ->
                         let samples = buff |> Array.ofSeq
                         let toWrite = [| s1; samples; s2 |] |> Array.concat
-                        writer.Write(toWrite, 0, toWrite.Length))             
+                        writer.Write(toWrite, 0, toWrite.Length))
                     count
                 |> ignore
             | Sound sound ->
@@ -106,9 +107,8 @@ module Program =
                 reader
                 |> AFR.TakeBytes
                     (fun buff ->
-                        let samples = buff |> Array.ofSeq                
-                        writer.Write(samples, 0, samples.Length)                    
-                    )
+                        let samples = buff |> Array.ofSeq
+                        writer.Write(samples, 0, samples.Length))
                     count
                 |> ignore)
 
@@ -180,31 +180,33 @@ module Program =
                     TimeSpan.FromMilliseconds(
                         float i * bin.TotalMilliseconds + offset.TotalMilliseconds + opts.Sampling
                     )
-                   Sample = avg
-                   //Sample =  Math.Round(avg * 1e4, 3)     
-                   |})
+                   Sample = avg                
+                |})
             |> List.ofSeq
 
         let ranges =
             let mutable silence = false
             let volumeTreshold = 0.0075
-            let minSilenceDuration = TimeSpan.FromSeconds(opts.MaxSilenceDuration)
+            let maxSilenceDuration = TimeSpan.FromSeconds(opts.MaxSilenceDuration)
 
             let mutable currentSilence = { RangeData.Empty with Start = offset }
             let mutable currentSound = { RangeData.Empty with Start = offset }
 
+            let finalSample = indexedBinnedSamples |> List.last
+
             seq {
                 for sample in indexedBinnedSamples do
-
                     match sample.Sample <= volumeTreshold with
+                    // End sound, start silence
                     | true when silence = false ->
                         silence <- true
 
                         currentSilence <-
                             { currentSilence with
                                 Start = sample.TimeStamp
-                                Stop = reader.TotalTime } //; Samples = ResizeArray() }
+                                Stop = reader.TotalTime }
 
+                    // End silence, start sound
                     | false when silence = true ->
                         silence <- false
 
@@ -213,7 +215,7 @@ module Program =
                                 Stop = sample.TimeStamp
                                 Length = sample.TimeStamp - currentSilence.Start }
 
-                        if currentSilence.Length >= minSilenceDuration then
+                        if currentSilence.Length >= maxSilenceDuration then
                             yield
                                 Sound
                                     { currentSound with
@@ -226,12 +228,33 @@ module Program =
                                 { currentSound with
                                     Start = sample.TimeStamp
                                     Stop = reader.TotalTime }
+                    | true when sample = finalSample ->
 
-                    | true -> ()
-                    | false -> ()
+                        let snd =
+                            { currentSound with
+                                Stop = currentSilence.Start
+                                Length = currentSilence.Start - currentSound.Start }
 
-            // if not silence
-            // then yield Sound currentSound
+                        let snc =
+                            { currentSilence with
+                                Length = currentSilence.Stop - currentSilence.Start }
+
+                        if snc.Length < maxSilenceDuration then
+                            yield
+                                Sound
+                                    { snd with
+                                        Stop = reader.TotalTime
+                                        Length = reader.TotalTime - snd.Start }
+                        else
+                            yield Sound snd
+                            yield Silence snc
+                    | false when sample = finalSample ->
+                        yield
+                            Sound
+                                { currentSound with
+                                    Stop = sample.TimeStamp
+                                    Length = currentSilence.Start - currentSound.Start }                    
+                    | _ as isSilence -> ()                                
             }
             |> List.ofSeq
 
