@@ -1,6 +1,5 @@
 ﻿namespace Silence
 
-
 open System
 open System.IO
 open NAudio.Wave
@@ -9,10 +8,7 @@ open Model
 open Newtonsoft.Json
 open Common
 
-
 module Program =
-
-
 
     let overwriteSilences
         (reader: AudioFileReader)
@@ -159,14 +155,68 @@ module Program =
         |> fun x -> JsonConvert.SerializeObject(x, Formatting.Indented)
         |> printfn "%s"
 
+    let padSoundInRange (padding: TimeSpan) (ranges: Range list) =
+
+        let doublePadding = TimeSpan.FromMilliseconds(padding.TotalMilliseconds * 2.0)
+        let first = ranges |> List.head
+        let last = ranges |> List.last
+
+        ranges
+        |> List.map (function
+            | range when range = first ->
+                match range with
+                | Sound snd ->
+                    Sound
+                        { snd with
+                            Stop = snd.Stop + padding
+                            Length = snd.Length + padding }
+                | Silence slc ->
+                    Silence
+                        { slc with
+                            Stop = slc.Stop - padding
+                            Length = slc.Length - padding }
+            | range when range = last ->
+                match range with
+                | Sound snd ->
+                    Sound
+                        { snd with
+                            Start = snd.Start + padding
+                            Length = snd.Length + padding }
+                | Silence slc ->
+                    Silence
+                        { slc with
+                            Start = slc.Start - padding
+                            Length = slc.Length - padding }
+            | Sound sound ->
+                Sound
+                    { Start = sound.Start - padding
+                      Stop = sound.Stop + padding
+                      Length = sound.Length + doublePadding }
+            | Silence silence ->
+                Silence
+                    { Start = silence.Start + padding
+                      Stop = silence.Stop - padding
+                      Length = silence.Length - doublePadding })
+
+
+
     let DetectSilence (opts: DetectOptions) =
-        //printfn "%A" opts
+        
+        if (opts.MaxSilenceDuration < 2.0 * opts.Padding)
+        then failwith $"Total padding is bigger than requested silence duration. --padding should at most be half of --max-silence ."
+
         let offset = TimeSpan.FromSeconds(opts.Offset)
         let duration = opts.Duration |> Option.map (fun dur -> TimeSpan.FromSeconds(dur))
 
+        let addPadding (ranges : Range list) = 
+            let padding = TimeSpan.FromSeconds(opts.Padding)  
+            if padding.TotalSeconds > 0 
+            then ranges |> padSoundInRange padding
+            else ranges
+
         use reader = new AudioFileReader(opts.InputFile)
 
-        let samplesPerSecond = reader.WaveFormat.SampleRate * reader.WaveFormat.Channels
+        let samplesPerSecond = sps reader
         let bin = TimeSpan.FromMilliseconds(opts.Sampling)
         let samplesPerBin = float samplesPerSecond * bin.TotalSeconds
 
@@ -180,9 +230,10 @@ module Program =
                     TimeSpan.FromMilliseconds(
                         float i * bin.TotalMilliseconds + offset.TotalMilliseconds + opts.Sampling
                     )
-                   Sample = avg                
-                |})
+                   Sample = avg |})            
             |> List.ofSeq
+            
+        
 
         let ranges =
             let mutable silence = false
@@ -253,10 +304,11 @@ module Program =
                             Sound
                                 { currentSound with
                                     Stop = sample.TimeStamp
-                                    Length = currentSilence.Start - currentSound.Start }                    
-                    | _ as isSilence -> ()                                
+                                    Length = currentSilence.Start - currentSound.Start }
+                    | _ as isSilence -> ()
             }
             |> List.ofSeq
+            |> addPadding
 
         if isNotNullorEmpty opts.OutputFile then
             let newDuration =
@@ -271,6 +323,7 @@ module Program =
         if isNotNullorEmpty opts.MarkPath then
             markSilences opts.MarkPath opts.MaxSilenceDuration reader ranges |> ignore
 
+    
     [<EntryPoint>]
     let main argv =
 

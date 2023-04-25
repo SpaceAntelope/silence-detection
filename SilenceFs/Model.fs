@@ -24,6 +24,8 @@ module Model =
         // NewSilenceDuration: float
         [<Option("mark",HelpText = "Mark silences on sound graph")>]
         MarkPath: string
+        [<Option('p',"padding", Default=0.1, HelpText = "Padding in seconds arround non-silent parts to preserve voice rising or dropping. Duration is included in --max-silence length, so it should last more than half the requested silence, for obvious reasons.")>]
+        Padding: float
     }
 
     type RangeData = { 
