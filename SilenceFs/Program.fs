@@ -12,12 +12,14 @@ open Common
 
 module Program =
 
+    
 
     let overwriteSilences
         (reader: AudioFileReader)
         (outputFile: string)
         (maxSilenceDuration: float)
         (ranges: Range list)
+        (markSilences: bool)
         =
 
         let samplesPerSecond = sps reader
@@ -29,9 +31,12 @@ module Program =
         let s2 = Array.create 10 -0.35f
 
         let shortSilence =
-            Array.create (int (maxSilenceDuration * float samplesPerSecond)) (0.0f)
-
-        let shortSilence = [| s1; shortSilence; s2 |] |> Array.concat
+            let emptyness = Array.create (int (maxSilenceDuration * float samplesPerSecond)) (0.0f)
+            if markSilences 
+            then
+                [| s1; emptyness; s2 |] |> Array.concat
+            else 
+                emptyness
 
         reader.Position <- 0
         use writer = new WaveFileWriter(outputFile, reader.WaveFormat)
@@ -102,10 +107,7 @@ module Program =
                 |> AFR.TakeBytes
                     (fun buff ->
                         let samples = buff |> Array.ofSeq                
-                        writer.Write(samples, 0, samples.Length)
-                    // writer.WriteSamples(shortLoudness, 0, shortLoudness.Length)
-                    // writer.WriteSamples(samples, 0, samples.Length)
-                    // writer.WriteSamples(shortLoudness, 0, shortLoudness.Length)
+                        writer.Write(samples, 0, samples.Length)                    
                     )
                     count
                 |> ignore)
@@ -185,7 +187,7 @@ module Program =
 
         let ranges =
             let mutable silence = false
-            let volumeTrehshold = 0.005 //75.0
+            let volumeTreshold = 0.0075
             let minSilenceDuration = TimeSpan.FromSeconds(opts.MaxSilenceDuration)
 
             let mutable currentSilence = { RangeData.Empty with Start = offset }
@@ -194,7 +196,7 @@ module Program =
             seq {
                 for sample in indexedBinnedSamples do
 
-                    match sample.Sample <= volumeTrehshold with
+                    match sample.Sample <= volumeTreshold with
                     | true when silence = false ->
                         silence <- true
 
@@ -235,7 +237,7 @@ module Program =
 
         if isNotNullorEmpty opts.OutputFile then
             let newDuration =
-                overwriteSilences reader opts.OutputFile opts.MaxSilenceDuration ranges
+                overwriteSilences reader opts.OutputFile opts.MaxSilenceDuration ranges false
 
             if opts.List then
                 report ranges newDuration reader.TotalTime opts

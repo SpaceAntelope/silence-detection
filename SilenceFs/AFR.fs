@@ -28,15 +28,11 @@ module AFR =
                 sampleCount <- reader.Read(buffer, 0, buffer.Length)
                 samplesProcessed <- samplesProcessed + float sampleCount
                 yield! buffer
-        }
+        }    
 
     let TakeSamples (f: single seq -> unit) (samplesToCompletion : int) (reader: AudioFileReader) =
-        // printf "%d %d " reader.WaveFormat.BlockAlign samplesToCompletion
-        let samplesToCompletion = samplesToCompletion - (samplesToCompletion % reader.WaveFormat.BlockAlign) // round to block align
-
+        let samplesToCompletion = samplesToCompletion |> alignToBlock reader
         let samplesPerSecond = Math.Min(sps reader, samplesToCompletion)
-        
-        // printfn "%d %d" samplesToCompletion samplesPerSecond
         
         let buffer  = Array.zeroCreate<single> (samplesPerSecond)       
         
@@ -44,7 +40,9 @@ module AFR =
             let mutable sampleCount =  1
             let mutable samplesProcessed = 0
             while sampleCount > 0 && samplesProcessed < samplesToCompletion do
-                sampleCount <- reader.Read(buffer, 0, buffer.Length)
+                let remaining = samplesToCompletion - samplesProcessed |> alignToBlock reader
+                let required = Math.Min(buffer.Length, remaining)
+                sampleCount <- reader.Read(buffer, 0, required)
                 samplesProcessed <- samplesProcessed + sampleCount
                 yield! (buffer |> Array.take sampleCount)
         } |> f
@@ -53,10 +51,9 @@ module AFR =
 
     let TakeBytes (f: byte seq -> unit) (samplesToCompletion: int) (reader: AudioFileReader) =
         let b2s = int byte2singleConversionFactor
-        let bytesToCompletion = b2s * samplesToCompletion
-        let bytesToCompletion = samplesToCompletion - (samplesToCompletion % reader.WaveFormat.BlockAlign) // round to block align
+        let bytesToCompletion = samplesToCompletion |> alignToBlock reader 
 
-        let bytesPerSecond = Math.Min(sps reader * b2s, bytesToCompletion)
+        let bytesPerSecond = Math.Min(sps reader * b2s, bytesToCompletion) // in case of very short required sample count
         
         // printfn "%d %d" samplesToCompletion samplesPerSecond
         
@@ -66,9 +63,14 @@ module AFR =
             let mutable sampleCount =  1
             let mutable samplesProcessed = 0
             while sampleCount > 0 && samplesProcessed < samplesToCompletion do
-                sampleCount <- reader.Read(buffer, 0, buffer.Length)
+                let remaining = samplesToCompletion - samplesProcessed |> alignToBlock reader
+                let required = Math.Min(buffer.Length, remaining)
+                sampleCount <- reader.Read(buffer, 0, required)
                 samplesProcessed <- samplesProcessed + sampleCount
                 yield! (buffer |> Array.take sampleCount)
+            
+            if (samplesToCompletion - samplesProcessed) > reader.WaveFormat.BlockAlign 
+            then failwith $"Track synchronization is off: Requested samples: {samplesToCompletion} Processed samples: {samplesProcessed}"
         } |> f
 
         reader
