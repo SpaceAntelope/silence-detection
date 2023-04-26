@@ -17,9 +17,7 @@ type DetectOptions =
       Sampling: float
       [<Option('m', "max-silence", Default = 0.25, HelpText = "Max silence duration in seconds")>]
       MaxSilenceDuration: float
-      // [<Option('n',"new-silence",Default=0.25, HelpText="Minimum silence duration in seconds")>]
-      // NewSilenceDuration: float
-      [<Option("mark", HelpText = "Mark silences on sound graph")>]
+      [<Option("marked-output", HelpText = "Mark silences on sound graph")>]
       MarkPath: string
       [<Option('p',
                "padding",

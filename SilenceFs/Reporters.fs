@@ -1,10 +1,15 @@
 namespace SilenceDetect
 
-module Reporters = 
+module Reporters =
     open System
     open Common
-    
-    let report (intervals: VolumeInterval list) (outputDurationFromWriter: TimeSpan) (originalDuration: TimeSpan) (opts: DetectOptions) =
+
+    let report
+        (intervals: VolumeInterval list)
+        (outputDurationFromWriter: TimeSpan)
+        (originalDuration: TimeSpan)
+        (opts: DetectOptions)
+        =
 
         let maxSilenceSpan = TimeSpan.FromSeconds(opts.MaxSilenceDuration)
 
@@ -45,4 +50,3 @@ module Reporters =
                 | Sound x -> {| x with Case = "Sound" |}) |}
         |> toJson
         |> printfn "%s"
-

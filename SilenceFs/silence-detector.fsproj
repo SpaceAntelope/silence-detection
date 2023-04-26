@@ -11,7 +11,7 @@
     <Compile Include="VolumeInterval.fs" />
     <Compile Include="Reporters.fs" />
     <Compile Include="Program.fs" />
-  </ItemGroup>  
+  </ItemGroup>
   <ItemGroup>
     <PackageReference Include="commandlineparser.fsharp" Version="2.9.1" />
     <PackageReference Include="NAudio" Version="2.1.0" />

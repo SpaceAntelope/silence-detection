@@ -14,7 +14,7 @@ type VolumeInterval =
 
 
 [<RequireQualifiedAccess>]
-module VolumeInterval =    
+module VolumeInterval =
     open NAudio.Wave
     open Common
 
@@ -32,7 +32,7 @@ module VolumeInterval =
         (maxSilenceDuration: float)
         (intervals: VolumeInterval list)
         (markSilences: bool)
-        (reader: AudioFileReader)        
+        (reader: AudioFileReader)
         =
 
         let samplesPerSecond = sps reader
@@ -53,7 +53,7 @@ module VolumeInterval =
                 emptyness
 
         reader.Position <- 0
-        
+
         seq {
             for sample in intervals do
                 match sample with
@@ -62,14 +62,14 @@ module VolumeInterval =
 
                     if (range.Length.TotalSeconds > maxSilenceDuration) then
                         yield! silenceReplacement
-                        
-                        // writer.WriteSamples(silenceReplacement, 0, silenceReplacement.Length)
+
+                // writer.WriteSamples(silenceReplacement, 0, silenceReplacement.Length)
 
                 | Sound range ->
                     let count = range.Length |> span2samples
 
-                    yield! reader |> AFR.mapSamples count 
-                    
+                    yield! reader |> AFR.mapSamples count
+
         }
 
     let writeFileWithSilenceCropped

@@ -7,7 +7,7 @@ open CommandLine
 open Newtonsoft.Json
 open Common
 
-module Program =    
+module Program =
 
     let DetectSilence (opts: DetectOptions) =
 
@@ -51,8 +51,13 @@ module Program =
             let volumeTreshold = 0.0075
             let maxSilenceDuration = TimeSpan.FromSeconds(opts.MaxSilenceDuration)
 
-            let mutable currentSilence = { VolumeInterval.empty with Start = offset }
-            let mutable currentSound = { VolumeInterval.empty with Start = offset }
+            let mutable currentSilence =
+                { VolumeInterval.empty with
+                    Start = offset }
+
+            let mutable currentSound =
+                { VolumeInterval.empty with
+                    Start = offset }
 
             let finalSample = indexedBinnedSamples |> List.last
 
@@ -123,7 +128,12 @@ module Program =
 
         if isNotNullorEmpty opts.OutputFile then
             let newDuration =
-                VolumeInterval.writeFileWithSilenceCropped opts.OutputFile opts.MaxSilenceDuration false intervals reader
+                VolumeInterval.writeFileWithSilenceCropped
+                    opts.OutputFile
+                    opts.MaxSilenceDuration
+                    false
+                    intervals
+                    reader
 
             if opts.List then
                 Reporters.report intervals newDuration reader.TotalTime opts
@@ -132,7 +142,8 @@ module Program =
             Reporters.report intervals TimeSpan.Zero reader.TotalTime opts
 
         if isNotNullorEmpty opts.MarkPath then
-            VolumeInterval.createFileWithSilenceMarked opts.MarkPath reader intervals |> ignore
+            VolumeInterval.createFileWithSilenceMarked opts.MarkPath reader intervals
+            |> ignore
 
 
     [<EntryPoint>]

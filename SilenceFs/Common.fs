@@ -17,10 +17,10 @@ module Common =
     let span2bytes (reader: AudioFileReader) (span: TimeSpan) =
         (span.TotalSeconds * float reader.WaveFormat.AverageBytesPerSecond) |> int
 
-
     let alignToBlock (reader: AudioFileReader) (bufferLength: int) =
         bufferLength - (bufferLength % reader.BlockAlign)
 
     let byte2singleConversionFactor = int64 (sizeof<float32> / sizeof<byte>)
 
-    let toJson x = JsonConvert.SerializeObject(x, Formatting.Indented)
+    let toJson x =
+        JsonConvert.SerializeObject(x, Formatting.Indented)
