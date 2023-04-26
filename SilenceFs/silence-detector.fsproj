@@ -6,8 +6,10 @@
   </PropertyGroup>
   <ItemGroup>
     <Compile Include="Common.fs" />
-    <Compile Include="Model.fs" />
+    <Compile Include="DetectOptions.fs" />
     <Compile Include="AFR.fs" />
+    <Compile Include="VolumeInterval.fs" />
+    <Compile Include="Reporters.fs" />
     <Compile Include="Program.fs" />
   </ItemGroup>  
   <ItemGroup>

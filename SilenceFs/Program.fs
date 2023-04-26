@@ -1,218 +1,30 @@
-﻿namespace Silence
+﻿namespace SilenceDetect
 
 open System
 open System.IO
 open NAudio.Wave
 open CommandLine
-open Model
 open Newtonsoft.Json
 open Common
 
-module Program =
-
-    let overwriteSilences
-        (reader: AudioFileReader)
-        (outputFile: string)
-        (maxSilenceDuration: float)
-        (ranges: Range list)
-        (markSilences: bool)
-        =
-
-        let samplesPerSecond = sps reader
-
-        let span2samples (span: TimeSpan) =
-            span.TotalSeconds * float samplesPerSecond |> int
-
-        let s1 = Array.create 10 0.35f
-        let s2 = Array.create 10 -0.35f
-
-        let shortSilence =
-            let emptyness =
-                Array.create (int (maxSilenceDuration * float samplesPerSecond)) (0.0f)
-
-            if markSilences then
-                [| s1; emptyness; s2 |] |> Array.concat
-            else
-                emptyness
-
-        reader.Position <- 0
-        use writer = new WaveFileWriter(outputFile, reader.WaveFormat)
-
-        List.fold
-            (fun state current ->
-                match current with
-                | Silence range ->
-                    //let count = range.Length |> span2samples
-                    // reader |> AFR.SkipSamples count
-
-                    reader.CurrentTime <- reader.CurrentTime.Add(range.Length)
-
-                    if (range.Length.TotalSeconds > maxSilenceDuration) then
-                        writer.WriteSamples(shortSilence, 0, shortSilence.Length)
-
-                    reader
-                | Sound range ->
-                    let count = range.Length |> span2samples
-
-                    reader
-                    |> AFR.TakeSamples
-                        (fun buff ->
-                            let samples = buff |> Array.ofSeq
-                            writer.WriteSamples(samples, 0, samples.Length))
-                        count)
-            reader
-            ranges
-        |> ignore
-
-        writer.Flush()
-
-        writer.TotalTime
-
-    let markSilences (markedPath: string) (maxSilenceDuration: float) (reader: AudioFileReader) (ranges: Range list) =
-        let samplesPerSecond = sps reader
-
-        let span2samples (span: TimeSpan) =
-            (span.TotalSeconds * float samplesPerSecond) |> int
-
-        let span2bytes (span: TimeSpan) =
-            (span.TotalSeconds * float reader.WaveFormat.AverageBytesPerSecond) |> int
-
-        let s1 = Array.create 10 0.35f |> Array.collect (BitConverter.GetBytes)
-        let s2 = Array.create 10 -0.35f |> Array.collect (BitConverter.GetBytes)
-
-        reader.Position <- 0
-        use writer = new WaveFileWriter(markedPath, reader.WaveFormat)
-
-        ranges
-        |> List.iter (fun range ->
-            match range with
-            | Silence silence ->
-                let count = silence.Length |> span2bytes
-
-                reader
-                |> AFR.TakeBytes
-                    (fun buff ->
-                        let samples = buff |> Array.ofSeq
-                        let toWrite = [| s1; samples; s2 |] |> Array.concat
-                        writer.Write(toWrite, 0, toWrite.Length))
-                    count
-                |> ignore
-            | Sound sound ->
-                let count = sound.Length |> span2bytes
-
-                reader
-                |> AFR.TakeBytes
-                    (fun buff ->
-                        let samples = buff |> Array.ofSeq
-                        writer.Write(samples, 0, samples.Length))
-                    count
-                |> ignore)
-
-        writer.Flush()
-
-        writer.TotalTime
-
-
-    let report (ranges: Range list) (duration: TimeSpan) (originalDuration: TimeSpan) (opts: DetectOptions) =
-
-        let maxSilenceSpan = TimeSpan.FromSeconds(opts.MaxSilenceDuration)
-
-        let silenceCount =
-            ranges
-            |> List.filter (function
-                | Silence x when x.Length >= maxSilenceSpan -> true
-                | _ -> false)
-            |> List.length
-
-        let (silenceDuration, soundDuration) =
-            ranges
-            |> List.fold
-                (fun (silence, sound) current ->
-                    match current with
-                    | Silence x -> (silence + x.Length, sound)
-                    | Sound x -> (silence, sound + x.Length))
-                (TimeSpan.Zero, TimeSpan.Zero)
-
-        {| SilenceDuration = silenceDuration
-           SoundDuration = soundDuration
-           ExpectedInputDuration = silenceDuration + soundDuration
-           ActualInputDuration = originalDuration
-           ExpectedOutputDuration =
-            soundDuration
-            + float silenceCount * TimeSpan.FromSeconds(opts.MaxSilenceDuration)
-           ActualOutputDuration = duration
-           OutputFile =
-            if isNotNullorEmpty opts.OutputFile then
-                IO.Path.GetFullPath(opts.OutputFile)
-            else
-                ""
-
-           Ranges =
-            ranges
-            |> List.map (function
-                | Silence x -> {| x with Case = "Silence" |}
-                | Sound x -> {| x with Case = "Sound" |}) |}
-        |> fun x -> JsonConvert.SerializeObject(x, Formatting.Indented)
-        |> printfn "%s"
-
-    let padSoundInRange (padding: TimeSpan) (ranges: Range list) =
-
-        let doublePadding = TimeSpan.FromMilliseconds(padding.TotalMilliseconds * 2.0)
-        let first = ranges |> List.head
-        let last = ranges |> List.last
-
-        ranges
-        |> List.map (function
-            | range when range = first ->
-                match range with
-                | Sound snd ->
-                    Sound
-                        { snd with
-                            Stop = snd.Stop + padding
-                            Length = snd.Length + padding }
-                | Silence slc ->
-                    Silence
-                        { slc with
-                            Stop = slc.Stop - padding
-                            Length = slc.Length - padding }
-            | range when range = last ->
-                match range with
-                | Sound snd ->
-                    Sound
-                        { snd with
-                            Start = snd.Start + padding
-                            Length = snd.Length + padding }
-                | Silence slc ->
-                    Silence
-                        { slc with
-                            Start = slc.Start - padding
-                            Length = slc.Length - padding }
-            | Sound sound ->
-                Sound
-                    { Start = sound.Start - padding
-                      Stop = sound.Stop + padding
-                      Length = sound.Length + doublePadding }
-            | Silence silence ->
-                Silence
-                    { Start = silence.Start + padding
-                      Stop = silence.Stop - padding
-                      Length = silence.Length - doublePadding })
-
-
+module Program =    
 
     let DetectSilence (opts: DetectOptions) =
-        
-        if (opts.MaxSilenceDuration < 2.0 * opts.Padding)
-        then failwith $"Total padding is bigger than requested silence duration. --padding should at most be half of --max-silence ."
+
+        if (opts.MaxSilenceDuration < 2.0 * opts.Padding) then
+            failwith
+                $"Total padding is bigger than requested silence duration. --padding should at most be half of --max-silence ."
 
         let offset = TimeSpan.FromSeconds(opts.Offset)
         let duration = opts.Duration |> Option.map (fun dur -> TimeSpan.FromSeconds(dur))
 
-        let addPadding (ranges : Range list) = 
-            let padding = TimeSpan.FromSeconds(opts.Padding)  
-            if padding.TotalSeconds > 0 
-            then ranges |> padSoundInRange padding
-            else ranges
+        let addPadding (intervals: VolumeInterval list) =
+            let padDuration = TimeSpan.FromSeconds(opts.Padding)
+
+            if padDuration.TotalSeconds > 0 then
+                intervals |> VolumeInterval.padSound padDuration
+            else
+                intervals
 
         use reader = new AudioFileReader(opts.InputFile)
 
@@ -230,18 +42,17 @@ module Program =
                     TimeSpan.FromMilliseconds(
                         float i * bin.TotalMilliseconds + offset.TotalMilliseconds + opts.Sampling
                     )
-                   Sample = avg |})            
+                   Sample = avg |})
             |> List.ofSeq
-            
-        
 
-        let ranges =
+
+        let intervals =
             let mutable silence = false
             let volumeTreshold = 0.0075
             let maxSilenceDuration = TimeSpan.FromSeconds(opts.MaxSilenceDuration)
 
-            let mutable currentSilence = { RangeData.Empty with Start = offset }
-            let mutable currentSound = { RangeData.Empty with Start = offset }
+            let mutable currentSilence = { VolumeInterval.empty with Start = offset }
+            let mutable currentSound = { VolumeInterval.empty with Start = offset }
 
             let finalSample = indexedBinnedSamples |> List.last
 
@@ -312,18 +123,18 @@ module Program =
 
         if isNotNullorEmpty opts.OutputFile then
             let newDuration =
-                overwriteSilences reader opts.OutputFile opts.MaxSilenceDuration ranges false
+                VolumeInterval.writeFileWithSilenceCropped opts.OutputFile opts.MaxSilenceDuration false intervals reader
 
             if opts.List then
-                report ranges newDuration reader.TotalTime opts
+                Reporters.report intervals newDuration reader.TotalTime opts
 
         else if opts.List then
-            report ranges TimeSpan.Zero reader.TotalTime opts
+            Reporters.report intervals TimeSpan.Zero reader.TotalTime opts
 
         if isNotNullorEmpty opts.MarkPath then
-            markSilences opts.MarkPath opts.MaxSilenceDuration reader ranges |> ignore
+            VolumeInterval.createFileWithSilenceMarked opts.MarkPath reader intervals |> ignore
 
-    
+
     [<EntryPoint>]
     let main argv =
 

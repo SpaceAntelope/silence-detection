@@ -1,5 +1,6 @@
-namespace Silence
+namespace SilenceDetect
 
+[<RequireQualifiedAccess>]
 module AFR = 
     open System
     open NAudio.Wave
@@ -48,6 +49,24 @@ module AFR =
         } |> f
 
         reader
+    let mapSamples (sampleCount : int) (reader: AudioFileReader) =
+        let samplesToCompletion = sampleCount |> alignToBlock reader
+        let samplesPerSecond = Math.Min(sps reader, samplesToCompletion)
+        
+        let buffer  = Array.zeroCreate<single> (samplesPerSecond)       
+        
+        seq {
+            let mutable sampleCount =  1
+            let mutable samplesProcessed = 0
+            while sampleCount > 0 && samplesProcessed < samplesToCompletion do
+                let remaining = samplesToCompletion - samplesProcessed |> alignToBlock reader
+                let required = Math.Min(buffer.Length, remaining)
+                sampleCount <- reader.Read(buffer, 0, required)
+                samplesProcessed <- samplesProcessed + sampleCount
+                yield! (buffer |> Array.take sampleCount)
+        }
+
+    
 
     let TakeBytes (f: byte seq -> unit) (samplesToCompletion: int) (reader: AudioFileReader) =
         let b2s = int byte2singleConversionFactor
